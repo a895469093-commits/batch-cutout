@@ -1,10 +1,11 @@
 @echo off
 title Batch Cutout - Start
 cd /d %~dp0
+if exist run.log del run.log
 setlocal EnableDelayedExpansion
 
 echo ============================================
-echo   Batch Cutout (portable)
+echo   Batch Cutout portable
 echo   First run: auto setup. Then: instant start.
 echo ============================================
 echo.
@@ -15,7 +16,8 @@ rem ===== [0a] Try system Python =====
 python --version >nul 2>&1
 if not errorlevel 1 (
   if not exist ".venv\Scripts\python.exe" (
-    echo [SETUP] Creating venv + dependencies (1-2 min)...
+    echo [SETUP] Creating venv + dependencies, 1-2 min...
+    echo [%date% %time%] venv setup >> run.log
     python -m venv .venv
     if errorlevel 1 (echo venv failed & pause & exit /b 1)
     ".venv\Scripts\python.exe" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple -q
@@ -29,6 +31,7 @@ rem ===== [0b] No system Python: portable runtime =====
 echo [SETUP] No system Python. Using portable runtime.
 if not exist "runtime\python.exe" (
   echo [SETUP] Downloading portable Python ~15MB, please wait...
+  echo [%date% %time%] downloading runtime >> run.log
   mkdir runtime 2>nul
   curl -sL -o "runtime\py.zip" "https://mirrors.huaweicloud.com/python/3.12.6/python-3.12.6-embed-amd64.zip"
   if errorlevel 1 goto pyfail
@@ -49,7 +52,7 @@ goto pyok
 echo.
 echo [ERROR] Portable Python download failed.
 echo Please install Python 3.10+ manually: https://www.python.org/downloads/
-echo (check "Add Python to PATH"), then run this again.
+echo Remember to check "Add Python to PATH" during install.
 pause
 exit /b 1
 :pyok
@@ -57,7 +60,7 @@ exit /b 1
 rem ===== [1] Dependencies for portable runtime =====
 if "%PY%"=="runtime\python.exe" (
   if not exist "runtime\.deps_done" (
-    echo [SETUP] Installing dependencies (1-2 min)...
+    echo [SETUP] Installing dependencies, 1-2 min...
     "%PY%" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple -q
     if errorlevel 1 (echo pip install failed & pause & exit /b 1)
     echo ok> "runtime\.deps_done"
@@ -71,7 +74,7 @@ if not exist "tools\cloudflared.exe" (
   curl -sL -o "tools\cloudflared.exe" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
   "tools\cloudflared.exe" --version >nul 2>&1
   if errorlevel 1 (
-    echo Download failed. Get it manually into tools\ folder:
+    echo Download failed. Get it manually into tools folder:
     echo https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
     pause
     exit /b 1
@@ -88,7 +91,7 @@ if not exist ".env" (
     echo APIMART_API_KEY=!APIKEY!
     echo PROXY_FOR_API=
   ) > .env
-  echo Saved to .env  ^(direct connection, no proxy^)
+  echo Saved to .env - direct connection, no proxy
 )
 
 rem ===== [4] Read config =====
@@ -106,6 +109,7 @@ if not "%PROXY_FOR_API%"=="" (
 
 echo.
 echo [START] Cutout service on port 8400...
+echo [%date% %time%] starting service >> run.log
 start "cutout-api" /min "%PY%" -m uvicorn app.main:app --host 0.0.0.0 --port 8400
 
 set /a n=0
