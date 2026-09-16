@@ -1,0 +1,9 @@
+services:
+  cutout:
+    build: .
+    ports:
+      - "8400:8400"
+    environment:
+      - APIMART_API_KEY=${APIMART_API_KEY}
+      - CUTOUT_WORKERS=4
+    restart: unless-stopped
