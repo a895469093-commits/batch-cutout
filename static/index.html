@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>批量抠图</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,"Microsoft YaHei",sans-serif;max-width:900px;margin:0 auto;padding:24px;background:#f5f6f8;color:#222}
+h1{font-size:22px}
+#drop{border:2px dashed #9aa4b2;border-radius:14px;padding:56px 20px;text-align:center;color:#667;background:#fff;cursor:pointer;transition:.15s}
+#drop.hover,#drop.drag{border-color:#3b82f6;background:#eff6ff}
+#bar{display:none;margin-top:16px;background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+#pct{font-weight:600}
+#track{height:8px;background:#e5e7eb;border-radius:4px;margin-top:8px;overflow:hidden}
+#fill{height:100%;width:0;background:#3b82f6;transition:width .5s}
+#res{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-top:18px}
+.card{background:#fff;border-radius:10px;padding:10px;box-shadow:0 1px 4px rgba(0,0,0,.08);text-align:center}
+.card img{width:100%;background:repeating-conic-gradient(#d4d4d4 0 25%,#fff 0 50%) 0 0/16px 16px;border-radius:6px}
+.card .name{font-size:12px;margin-top:6px;word-break:break-all}
+.card .st{font-size:12px;margin-top:2px}
+.ok{color:#16a34a}.fail{color:#dc2626}.wait{color:#9ca3af}
+#zip{display:none;margin-top:18px;background:#2563eb;color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:600}
+footer{margin-top:28px;color:#94a3b8;font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<h1>🪄 批量抠图(GPT-Image-2)</h1>
+<div id="drop">点击选择或拖拽图片到这里(可多选 png / jpg / webp)</div>
+<div id="bar">
+  <div>进度:<span id="pct">0/0</span></div>
+  <div id="track"><div id="fill"></div></div>
+</div>
+<a id="zip" href="#">📦 打包下载全部结果</a>
+<div id="res"></div>
+<footer>背景移除 · 透明PNG输出 · 4路并发</footer>
+<script>
+const drop=document.getElementById('drop'),res=document.getElementById('res'),bar=document.getElementById('bar'),
+pct=document.getElementById('pct'),fill=document.getElementById('fill'),zipBtn=document.getElementById('zip');
+let batchId=null,timer=null,seen={};
+
+drop.onclick=()=>{const i=document.createElement('input');i.type='file';i.multiple=true;i.accept='image/*';
+i.onchange=()=>up(i.files);i.click();};
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('drag')};
+drop.ondragleave=()=>drop.classList.remove('drag');
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('drag');up(e.dataTransfer.files)};
+
+async function up(files){
+  if(!files.length)return;
+  const fd=new FormData();
+  [...files].forEach(f=>fd.append('files',f));
+  res.innerHTML='';seen={};bar.style.display='block';zipBtn.style.display='none';
+  pct.textContent='上传中...';fill.style.width='0%';
+  const r=await fetch('/api/upload',{method:'POST',body:fd});
+  const d=await r.json();
+  batchId=d.batch_id;
+  timer=setInterval(poll,2000);
+}
+
+async function poll(){
+  if(!batchId)return;
+  const r=await fetch('/api/status/'+batchId);
+  const d=await r.json();
+  const total=d.total,fin=d.finished;
+  pct.textContent=fin+'/'+total;
+  fill.style.width=(fin/total*100)+'%';
+  for(const [name,it] of Object.entries(d.items)){
+    if(seen[name]===it.status+String(it.file||''))continue;
+    seen[name]=it.status+String(it.file||'');
+    let c=document.getElementById('c_'+btoa(unescape(encodeURIComponent(name))).replace(/=/g,''));
+    if(!c){c=document.createElement('div');c.className='card';c.id='c_'+btoa(unescape(encodeURIComponent(name))).replace(/=/g,'');
+      c.innerHTML='<div class="st wait">排队中…</div><div class="name">'+name+'</div>';res.appendChild(c);}
+    const st=c.querySelector('.st');
+    if(it.status==='done'){
+      c.innerHTML='<img src="/api/file/'+batchId+'/'+encodeURIComponent(it.file)+'"><div class="name">'+it.file+'</div><div class="st ok">✓ 完成</div>';
+    }else if(it.status==='failed'){
+      st.textContent='✗ 失败:'+it.error;st.className='st fail';
+    }else{st.textContent='处理中…';st.className='st wait';}
+  }
+  if(fin>=total){
+    clearInterval(timer);timer=null;
+    zipBtn.href='/api/zip/'+batchId;zipBtn.style.display='inline-block';
+    pct.textContent='全部完成 '+total+'/'+total;
+  }
+}
+</script>
+</body>
+</html>

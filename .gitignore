@@ -1,0 +1,7 @@
+# 密钥与运行数据,永不提交
+.env
+data/
+__pycache__/
+*.pyc
+.venv/
+venv/
