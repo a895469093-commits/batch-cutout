@@ -25,6 +25,15 @@ PROMPT = (
 )
 
 
+def _ca_context():
+    """优先用 certifi 证书库(apimart 的 WE1 新链不在 Windows 系统库里)"""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
 def _http_json(url, payload=None, retries=5):
     for i in range(retries):
         try:
@@ -33,7 +42,7 @@ def _http_json(url, payload=None, retries=5):
             if data:
                 headers["Content-Type"] = "application/json"
             req = urllib.request.Request(url, data=data, headers=headers)
-            with urllib.request.urlopen(req, timeout=120) as r:
+            with urllib.request.urlopen(req, timeout=120, context=_ca_context()) as r:
                 return json.loads(r.read())
         except urllib.error.URLError as e:
             # 证书校验失败(网关/代理做了HTTPS拦截): 自动降级为免校验重试
@@ -41,7 +50,9 @@ def _http_json(url, payload=None, retries=5):
                 ctx = ssl._create_unverified_context()
                 try:
                     req2 = urllib.request.Request(url, data=data, headers=headers)
-                    with urllib.request.urlopen(req2, timeout=120, context=ctx) as r:
+                    ctx2 = _ca_context()
+                    req2 = urllib.request.Request(url, data=data, headers=headers)
+                    with urllib.request.urlopen(req2, timeout=120, context=ctx2) as r:
                         return json.loads(r.read())
                 except Exception:
                     pass
@@ -57,13 +68,13 @@ def _http_json(url, payload=None, retries=5):
 def _http_bytes(url, retries=5):
     for i in range(retries):
         try:
-            with urllib.request.urlopen(url, timeout=180) as r:
+            with urllib.request.urlopen(url, timeout=180, context=_ca_context()) as r:
                 return r.read()
         except urllib.error.URLError as e:
             if isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
                 ctx = ssl._create_unverified_context()
                 try:
-                    with urllib.request.urlopen(url, timeout=180, context=ctx) as r:
+                    with urllib.request.urlopen(url, timeout=180, context=_ca_context()) as r:
                         return r.read()
                 except Exception:
                     pass
