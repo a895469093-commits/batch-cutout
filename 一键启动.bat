@@ -84,17 +84,11 @@ if not exist ".env" (
   set "APIKEY="
   set /p "APIKEY=> "
   if "!APIKEY!"=="" (echo empty key, exit & pause & exit /b 1)
-  echo.
-  echo Does this PC need a local proxy to reach the GPT API?
-  echo   No proxy / direct: press Enter
-  echo   Clash user: type  http://127.0.0.1:7897
-  set "PROXYV="
-  set /p "PROXYV=> "
   (
     echo APIMART_API_KEY=!APIKEY!
-    echo PROXY_FOR_API=!PROXYV!
+    echo PROXY_FOR_API=
   ) > .env
-  echo Saved to .env
+  echo Saved to .env  ^(direct connection, no proxy^)
 )
 
 rem ===== [4] Read config =====
