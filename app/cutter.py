@@ -3,7 +3,9 @@ import base64
 import io
 import json
 import os
+import ssl
 import time
+import urllib.error
 import urllib.request
 
 from PIL import Image
@@ -33,6 +35,19 @@ def _http_json(url, payload=None, retries=5):
             req = urllib.request.Request(url, data=data, headers=headers)
             with urllib.request.urlopen(req, timeout=120) as r:
                 return json.loads(r.read())
+        except urllib.error.URLError as e:
+            # 证书校验失败(网关/代理做了HTTPS拦截): 自动降级为免校验重试
+            if isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
+                ctx = ssl._create_unverified_context()
+                try:
+                    req2 = urllib.request.Request(url, data=data, headers=headers)
+                    with urllib.request.urlopen(req2, timeout=120, context=ctx) as r:
+                        return json.loads(r.read())
+                except Exception:
+                    pass
+            if i == retries - 1:
+                raise
+            time.sleep(3)
         except Exception:
             if i == retries - 1:
                 raise
@@ -44,6 +59,17 @@ def _http_bytes(url, retries=5):
         try:
             with urllib.request.urlopen(url, timeout=180) as r:
                 return r.read()
+        except urllib.error.URLError as e:
+            if isinstance(getattr(e, "reason", None), ssl.SSLCertVerificationError):
+                ctx = ssl._create_unverified_context()
+                try:
+                    with urllib.request.urlopen(url, timeout=180, context=ctx) as r:
+                        return r.read()
+                except Exception:
+                    pass
+            if i == retries - 1:
+                raise
+            time.sleep(3)
         except Exception:
             if i == retries - 1:
                 raise
