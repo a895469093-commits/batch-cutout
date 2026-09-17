@@ -3,3 +3,5 @@ uvicorn>=0.29
 pillow>=10.0
 python-multipart>=0.0.9
 certifi>=2024.0
+numpy>=1.26
+scipy>=1.11

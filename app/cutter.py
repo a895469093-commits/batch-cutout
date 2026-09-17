@@ -21,7 +21,8 @@ PROMPT = (
     "all letters, all objects and every part of them - including ribbons, bands and stripes "
     "wrapping around objects - all attached artwork, all colors, textures and details, "
     "unchanged in shape, position and size. Only the background becomes transparent. "
-    "Clean natural edges, no leftover background fragments, no halos."
+    "Clean natural edges, no leftover background fragments, no halos. "
+    "Do NOT draw a checkerboard pattern - the transparency must be a real alpha channel, not a painted checkerboard."
 )
 
 
@@ -110,7 +111,26 @@ def cutout_image(img: Image.Image) -> Image.Image:
         st = t.get("data", {}).get("status") or t.get("status")
         if st == "completed":
             url = t["data"]["result"]["images"][0]["url"][0]
-            return Image.open(io.BytesIO(_http_bytes(url)))
+            img = Image.open(io.BytesIO(_http_bytes(url)))
+            return _fix_fake_alpha(img)
         if st == "failed":
             raise RuntimeError(f"任务失败: {str(t)[:200]}")
     raise TimeoutError("生成超时")
+
+
+def _fix_fake_alpha(img: Image.Image) -> Image.Image:
+    """模型有时把透明画成棋盘格像素(无alpha通道)。自动检测并转真透明。"""
+    if img.mode in ("RGBA", "LA"):
+        return img  # 已有透明通道
+    try:
+        import tempfile
+        from .dechecker import remove_checkerboard
+        with tempfile.TemporaryDirectory() as td:
+            src_p = os.path.join(td, "in.png")
+            img.convert("RGB").save(src_p)
+            out_p = remove_checkerboard(src_p, os.path.join(td, "out.png"))
+            fixed = Image.open(out_p)
+            fixed.load()  # Windows下必须在临时目录删除前完整载入
+            return fixed
+    except Exception:
+        return img
